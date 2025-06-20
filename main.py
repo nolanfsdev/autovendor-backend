@@ -1,73 +1,76 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import JSONResponse
-import fitz  # PyMuPDF
-import openai
-import os
-
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
 from dotenv import load_dotenv
+from supabase import create_client, Client
+import os
+import fitz  # PyMuPDF
+import datetime
 
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
 app = FastAPI()
 
-# (Optional) Allow local frontend testing
+# CORS (optional for frontend)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# OpenAI setup
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key)
+
+# Supabase setup
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
+
 @app.post("/upload")
-async def upload_contract(file: UploadFile = File(...)):
-    try:
-        # Read the uploaded PDF
-        contents = await file.read()
-        pdf = fitz.open(stream=contents, filetype="pdf")
-        full_text = ""
-        for page in pdf:
-            full_text += page.get_text()
+async def upload_file(file: UploadFile = File(...)):
+    # Read file
+    contents = await file.read()
 
-        # Prompt GPT-4 to flag risky contract clauses
-        prompt = f"""
-You are a contract risk reviewer.
+    # Extract text from PDF
+    with fitz.open(stream=contents, filetype="pdf") as doc:
+        text = ""
+        for page in doc:
+            text += page.get_text()
 
-Analyze the following vendor contract and return a list of risky clauses such as:
-- Auto-renewal
-- Termination fees
-- Missing compliance language
-- Payment terms longer than 30 days
-- Lack of liability or indemnity clauses
+    # Analyze with GPT
+    prompt = f"""
+You are a contract risk analyzer. Identify red flags in the following vendor contract text in plain English:
+1. Auto-renewal clauses
+2. Termination fees
+3. Payment terms longer than 30 days
+4. Compliance or legal risks
+5. Exclusivity or lock-in
+
+Return them as a JSON object under keys:
+- auto_renewal
+- termination_fees
+- payment_terms
+- compliance_gaps
+- exclusivity_clauses
 
 Contract:
-\"\"\"
-{full_text[:6000]}  # limit tokens
-\"\"\"
-
-Respond in this JSON format:
-{{
-  "auto_renewal": "...",
-  "termination_fees": "...",
-  "compliance_gaps": "...",
-  "payment_terms": "...",
-  "other_risks": "..."
-}}
+{text[:3500]}  # truncate if needed
 """
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    gpt_output = response.choices[0].message.content
 
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a legal contract risk analyzer."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.4
-        )
+    # Save to Supabase
+    supabase.table("contracts").insert({
+        "filename": file.filename,
+        "created_at": datetime.datetime.utcnow().isoformat(),
+        "raw_text": text[:5000],
+        "analysis": gpt_output
+    }).execute()
 
-        result = response['choices'][0]['message']['content']
-        return JSONResponse(content={"flags": result})
-
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+    return {"flags": gpt_output}
