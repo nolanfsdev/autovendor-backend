@@ -6,7 +6,6 @@ import os
 import fitz  # PyMuPDF
 import datetime
 
-
 app = FastAPI()
 
 # CORS (optional for frontend)
@@ -18,17 +17,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# OpenAI setup
+# OpenAI setup (safe at global level)
 openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    raise ValueError("Missing OPENAI_API_KEY env var")
 client = OpenAI(api_key=openai_api_key)
-
-# Supabase setup
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(supabase_url, supabase_key)
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
+    # Supabase setup (must be inside the route)
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    if not supabase_url or not supabase_key:
+        raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY env vars")
+    supabase: Client = create_client(supabase_url, supabase_key)
+
     # Read file
     contents = await file.read()
 
@@ -55,8 +58,9 @@ Return them as a JSON object under keys:
 - exclusivity_clauses
 
 Contract:
-{text[:3500]}  # truncate if needed
+{text[:3500]}
 """
+
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}],
