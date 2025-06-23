@@ -69,7 +69,7 @@ Contract:
 
     # Save to Supabase
     supabase.table("contracts").insert({
-        "filename": file.filename,
+        "file_name": file.filename,
         "created_at": datetime.datetime.utcnow().isoformat(),
         "raw_text": text[:5000],
         "analysis": gpt_output
