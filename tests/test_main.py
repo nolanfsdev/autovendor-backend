@@ -91,3 +91,62 @@ def test_upload_openai_error(mock_create_client, mock_openai, mock_getenv, sampl
 
     assert response.status_code == 500
     assert "OpenAI API failed" in response.json()["detail"]
+
+from unittest.mock import patch, MagicMock
+
+@patch("os.getenv")
+@patch("app.main.create_client")
+@patch("fitz.open")
+def test_upload_pdf_read_error(mock_fitz_open, mock_create_client, mock_getenv, sample_pdf_path):
+    mock_getenv.side_effect = lambda key: {
+        "OPENAI_API_KEY": "fake-key",
+        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_KEY": "fake-supabase-key"
+    }.get(key, "")
+
+    # Force fitz.open to raise an exception
+    mock_fitz_open.side_effect = Exception("Corrupted PDF")
+
+    # Mock Supabase
+    mock_supabase = MagicMock()
+    mock_supabase.table.return_value.insert.return_value.execute.return_value = {}
+    mock_create_client.return_value = mock_supabase
+
+    response = client.post(
+        "/upload",
+        files={"file": ("sample_contract.pdf", open(sample_pdf_path, "rb"), "application/pdf")}
+    )
+
+    assert response.status_code == 500
+    assert "Failed to read PDF" in response.json()["detail"]
+
+@patch("os.getenv")
+@patch("openai.resources.chat.completions.Completions.create")
+@patch("app.main.create_client")
+def test_upload_supabase_insert_error(mock_create_client, mock_openai, mock_getenv, sample_pdf_path):
+    mock_getenv.side_effect = lambda key: {
+        "OPENAI_API_KEY": "fake-key",
+        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_KEY": "fake-supabase-key"
+    }.get(key, "")
+
+    mock_openai.return_value.choices = [
+        type("obj", (object,), {
+            "message": type("msg", (object,), {
+                "content": '{"mock_flag": "mock_value"}'
+            })()
+        })()
+    ]
+
+    # Simulate Supabase throwing error during .execute()
+    mock_supabase = MagicMock()
+    mock_supabase.table.return_value.insert.return_value.execute.side_effect = Exception("Insert failed")
+    mock_create_client.return_value = mock_supabase
+
+    response = client.post(
+        "/upload",
+        files={"file": ("sample_contract.pdf", open(sample_pdf_path, "rb"), "application/pdf")}
+    )
+
+    assert response.status_code == 500
+    assert "Database insert failed" in response.json()["detail"]
