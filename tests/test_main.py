@@ -3,8 +3,6 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-client = TestClient(app)
-
 @pytest.fixture
 def sample_pdf_path():
     return os.path.join(os.path.dirname(__file__), "sample_contract.pdf")
