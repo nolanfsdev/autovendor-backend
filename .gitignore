@@ -9,10 +9,10 @@ __pycache__/
 *.pyc
 
 # Test cache
-.pytest_cache/
+*.pytest_cache/
 
 # Environment
-.env
+*.env
 
 # OS generated
 .DS_Store
