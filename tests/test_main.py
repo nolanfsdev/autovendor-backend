@@ -10,11 +10,15 @@ client = TestClient(app)
 def sample_pdf_path():
     return os.path.join(os.path.dirname(__file__), "sample_contract.pdf")
 
-@patch("app.main.extract_contract_flags")
 @patch("os.getenv")
+@patch("app.main.extract_contract_flags")
+
 def test_upload_contract(mock_getenv, mock_extract, sample_pdf_path):
     mock_getenv.return_value = "fake-key"
     mock_extract.return_value = {"mock_flag": "mock_value"}
+
+    from app.main import app
+    client = TestClient(app)
 
     with open(sample_pdf_path, "rb") as f:
         response = client.post("/upload", files={"file": ("sample_contract.pdf", f, "application/pdf")})
