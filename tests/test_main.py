@@ -11,7 +11,9 @@ def sample_pdf_path():
     return os.path.join(os.path.dirname(__file__), "sample_contract.pdf")
 
 @patch("app.main.extract_contract_flags")
-def test_upload_contract(mock_extract, sample_pdf_path):
+@patch("app.main.os.getenv")
+def test_upload_contract(mock_getenv, mock_extract, sample_pdf_path):
+    mock_getenv.return_value = "fake-key"
     mock_extract.return_value = {"mock_flag": "mock_value"}
 
     with open(sample_pdf_path, "rb") as f:
@@ -19,4 +21,3 @@ def test_upload_contract(mock_extract, sample_pdf_path):
 
     assert response.status_code == 200
     assert response.json()["flags"] == {"mock_flag": "mock_value"}
-
