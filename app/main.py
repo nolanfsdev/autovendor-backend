@@ -38,7 +38,8 @@ async def upload_file(file: UploadFile = File(...)):
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")
     if not supabase_url or not supabase_key:
-        raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY env vars")
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE_KEY env vars")
+
     supabase: Client = create_client(supabase_url, supabase_key)
 
     contents = await file.read()

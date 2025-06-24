@@ -40,7 +40,7 @@ def test_upload_contract(mock_create_client, mock_openai, mock_getenv, sample_pd
 
     assert response.status_code == 200
     assert response.json()["flags"] == {"mock_flag": "mock_value"}
-    
+
 def test_upload_invalid_file_type():
     invalid_file = ("not_a_pdf.txt", b"This is not a PDF", "text/plain")
     response = client.post(
@@ -49,3 +49,20 @@ def test_upload_invalid_file_type():
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Only PDF files are supported."
+
+@patch("os.getenv")
+def test_upload_missing_supabase_env(mock_getenv, sample_pdf_path):
+    # Simulate missing SUPABASE env vars
+    mock_getenv.side_effect = lambda key: {
+        "OPENAI_API_KEY": "fake-key",
+        "SUPABASE_URL": "",
+        "SUPABASE_KEY": ""
+    }.get(key, "")
+
+    response = client.post(
+        "/upload",
+        files={"file": ("sample_contract.pdf", open(sample_pdf_path, "rb"), "application/pdf")}
+    )
+
+    assert response.status_code == 500
+    assert "Missing SUPABASE_URL or SUPABASE_KEY" in response.json()["detail"]
