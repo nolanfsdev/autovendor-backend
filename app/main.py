@@ -86,7 +86,7 @@ Contract:
         except Exception as e:
             logging.warning(f"GPT call failed (attempt {attempt + 1}): {e}")
             if attempt == 2:
-                raise HTTPException(status_code=500, detail="OpenAI API failed after 3 attempts")
+                raise HTTPException(status_code=500, detail="OpenAI API failed")
 
     # Parse GPT output to JSON
     try:

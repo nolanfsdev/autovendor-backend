@@ -66,3 +66,28 @@ def test_upload_missing_supabase_env(mock_getenv, sample_pdf_path):
 
     assert response.status_code == 500
     assert "Missing SUPABASE_URL or SUPABASE_KEY" in response.json()["detail"]
+
+@patch("os.getenv")
+@patch("openai.resources.chat.completions.Completions.create")
+@patch("app.main.create_client")
+def test_upload_openai_error(mock_create_client, mock_openai, mock_getenv, sample_pdf_path):
+    mock_getenv.side_effect = lambda key: {
+        "OPENAI_API_KEY": "fake-key",
+        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_KEY": "fake-supabase-key"
+    }.get(key, "")
+
+    # Simulate OpenAI throwing an exception
+    mock_openai.side_effect = Exception("OpenAI is down")
+
+    mock_supabase = MagicMock()
+    mock_supabase.table.return_value.insert.return_value.execute.return_value = {}
+    mock_create_client.return_value = mock_supabase
+
+    response = client.post(
+        "/upload",
+        files={"file": ("sample_contract.pdf", open(sample_pdf_path, "rb"), "application/pdf")}
+    )
+
+    assert response.status_code == 500
+    assert "OpenAI API failed" in response.json()["detail"]
