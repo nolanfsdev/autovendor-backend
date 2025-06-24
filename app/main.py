@@ -22,11 +22,12 @@ app.add_middleware(
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
-# OpenAI setup
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    raise ValueError("Missing OPENAI_API_KEY env var")
-openai_client = OpenAI(api_key=openai_api_key)
+# ✅ Delayed OpenAI API key loading (to allow test mocking)
+def get_openai_client():
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise ValueError("Missing OPENAI_API_KEY env var")
+    return OpenAI(api_key=openai_api_key)
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -72,6 +73,7 @@ Contract:
 
     # Call GPT with retries
     gpt_output = ""
+    openai_client = get_openai_client()
     for attempt in range(3):
         try:
             response = openai_client.chat.completions.create(
