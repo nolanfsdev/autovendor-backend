@@ -8,7 +8,7 @@ def sample_pdf_path():
     return os.path.join(os.path.dirname(__file__), "sample_contract.pdf")
 
 @patch("os.getenv")
-@patch("app.main.extract_contract_flags")
+# @patch("app.main.extract_contract_flags")
 
 def test_upload_contract(mock_getenv, mock_extract, sample_pdf_path):
     mock_getenv.return_value = "fake-key"
