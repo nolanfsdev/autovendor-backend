@@ -38,13 +38,14 @@ def test_upload_contract(mock_create_client, mock_openai, mock_getenv, sample_pd
         files={"file": ("sample_contract.pdf", open(sample_pdf_path, "rb"), "application/pdf")}
     )
 
+    assert response.status_code == 200
+    assert response.json()["flags"] == {"mock_flag": "mock_value"}
+    
 def test_upload_invalid_file_type():
+    invalid_file = ("not_a_pdf.txt", b"This is not a PDF", "text/plain")
     response = client.post(
         "/upload",
-        files={"file": ("not_a_pdf.txt", b"This is not a PDF", "text/plain")}
+        files={"file": invalid_file}
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Only PDF files are supported."
-
-    assert response.status_code == 200
-    assert response.json()["flags"] == {"mock_flag": "mock_value"}
