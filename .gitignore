@@ -1,1 +1,19 @@
+# Ignore Python cache files and folders
+__pycache__/
+*.py[cod]
+
+# VSCode settings (optional, if you ever sync settings)
+.vscode/
+
+# Bytecode
+*.pyc
+
+# Test cache
+.pytest_cache/
+
+# Environment
 .env
+
+# OS generated
+.DS_Store
+Thumbs.db
