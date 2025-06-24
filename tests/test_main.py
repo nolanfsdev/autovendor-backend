@@ -1,107 +1,42 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
-from supabase import create_client, Client
 import os
-import fitz  # PyMuPDF
-import datetime
-import json
-import logging
+import pytest
+from fastapi.testclient import TestClient
+from unittest.mock import patch, MagicMock
+from app.main import app
 
-app = FastAPI()
+client = TestClient(app)
 
-# CORS (optional for frontend)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@pytest.fixture
+def sample_pdf_path():
+    return os.path.join(os.path.dirname(__file__), "sample_contract.pdf")
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+@patch("os.getenv")
+@patch("openai.resources.chat.completions.Completions.create")
+@patch("app.main.create_client")  # 👈 This mocks Supabase
+def test_upload_contract(mock_create_client, mock_openai, mock_getenv, sample_pdf_path):
+    mock_getenv.side_effect = lambda key: {
+        "OPENAI_API_KEY": "fake-key",
+        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_KEY": "fake-supabase-key"
+    }.get(key, "")
 
-# OpenAI setup
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    raise ValueError("Missing OPENAI_API_KEY env var")
-openai_client = OpenAI(api_key=openai_api_key)
+    mock_openai.return_value.choices = [
+        type("obj", (object,), {
+            "message": type("msg", (object,), {
+                "content": '{"mock_flag": "mock_value"}'
+            })()
+        })()
+    ]
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    # 👇 Mock Supabase insert call to do nothing
+    mock_supabase = MagicMock()
+    mock_supabase.table.return_value.insert.return_value.execute.return_value = {}
+    mock_create_client.return_value = mock_supabase
 
-    # Supabase setup
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
-    if not supabase_url or not supabase_key:
-        raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY env vars")
-    supabase: Client = create_client(supabase_url, supabase_key)
+    response = client.post(
+        "/upload",
+        files={"file": ("sample_contract.pdf", open(sample_pdf_path, "rb"), "application/pdf")}
+    )
 
-    contents = await file.read()
-
-    # Extract text from PDF
-    try:
-        with fitz.open(stream=contents, filetype="pdf") as doc:
-            text = "".join(page.get_text() for page in doc)
-    except Exception as e:
-        logging.error(f"PDF extraction failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to read PDF")
-
-    # GPT prompt
-    prompt = f"""
-You are a contract risk analyzer. Identify red flags in the following vendor contract text in plain English:
-1. Auto-renewal clauses
-2. Termination fees
-3. Payment terms longer than 30 days
-4. Compliance or legal risks
-5. Exclusivity or lock-in
-
-Return them as a JSON object under keys:
-- auto_renewal
-- termination_fees
-- payment_terms
-- compliance_gaps
-- exclusivity_clauses
-
-Contract:
-{text[:3500]}
-"""
-
-    # Call GPT with retries
-    gpt_output = ""
-    for attempt in range(3):
-        try:
-            response = openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-            )
-            gpt_output = response.choices[0].message.content
-            break
-        except Exception as e:
-            logging.warning(f"GPT call failed (attempt {attempt + 1}): {e}")
-            if attempt == 2:
-                raise HTTPException(status_code=500, detail="OpenAI API failed after 3 attempts")
-
-    # Parse GPT output to JSON
-    try:
-        flags = json.loads(gpt_output)
-    except Exception as e:
-        logging.warning(f"Failed to parse GPT output as JSON: {e}")
-        flags = {"raw": gpt_output}
-
-    # Save to Supabase
-    try:
-        supabase.table("contracts").insert({
-            "file_name": file.filename,
-            "created_at": datetime.datetime.utcnow().isoformat(),
-            "raw_text": text[:5000],
-            "flags": flags
-        }).execute()
-    except Exception as e:
-        logging.error(f"Supabase insert failed: {e}")
-        raise HTTPException(status_code=500, detail="Database insert failed")
-
-    return {"flags": flags}
+    assert response.status_code == 200
+    assert response.json()["flags"] == {"mock_flag": "mock_value"}
