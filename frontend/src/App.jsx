@@ -5,10 +5,10 @@ import { useState } from "react";
  *  Simple PDF-upload front-end for AutoVendor
  * -------------------------------------------------*/
 export default function App() {
-  const [file, setFile]         = useState(null);       // PDF file object
-  const [isUploading, setBusy]  = useState(false);      // spinner toggle
-  const [result, setResult]     = useState(null);       // backend response
-  const [error, setError]       = useState(null);       // error message
+  const [file, setFile] = useState(null);       // PDF file object
+  const [isUploading, setBusy] = useState(false);      // spinner toggle
+  const [result, setResult] = useState(null);       // backend response
+  const [error, setError] = useState(null);       // error message
 
   // ↳ Handle <input type="file" …>
   function handleSelect(e) {
@@ -80,9 +80,22 @@ export default function App() {
         )}
 
         {result && (
-          <pre className="mt-4 overflow-auto rounded bg-gray-100 p-4 text-sm">
-            {JSON.stringify(result, null, 2)}
-          </pre>
+          <div className="mt-4">
+            <h2 className="text-xl font-semibold mb-2">Contract Risk Flags</h2>
+            <table className="min-w-full border border-gray-300 text-sm">
+              <tbody>
+                {Object.entries(result).map(([key, val]) => (
+                  <tr key={key} className="border-b">
+                    <td className="px-4 py-2 font-medium">{key}</td>
+                    <td className="px-4 py-2">
+                      {val === true ? "⚠️ YES" : val === false ? "✅ NO" : val}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
         )}
       </section>
     </main>
